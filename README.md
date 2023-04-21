@@ -61,26 +61,26 @@ The data loader creates batches for training/validation or testing. It assures t
 
 ![Screenshot 2023-04-21 at 13 39 46](https://user-images.githubusercontent.com/6516711/233627056-e5cd92bf-2bf5-4d2c-a530-4f17fcc1fed1.png)
 
-## Data split
+### Data split
 Datasets for straining and validation are splitted in time: first 60% of snapshots in the datasets are used for training, and last 20% - for validation. The rest 20% of snapshots are skipped, this gap in was introduced to make validation data decorrelated from the training data.
 The data used for validation during the training is also used for the after-training tests.
 
 ![Screenshot 2023-04-21 at 13 42 18](https://user-images.githubusercontent.com/6516711/233627297-54b2e908-35df-4f08-a6ef-a62e348932bb.png)
 
-## Data geometry
+### Data geometry
 All data is organized in tensors with presibed shape. For 2D data it is $[N,C,H,W]$, where $N$ is the number of samples in a batch, $C$ - number of channels (features), $H$ - image height, $W$ - image width. For 3D data the  shape is $[N,C,L,H,W]$, where another dimension $L$ - number of vertical levels is addded.
 
-## Model architecture
+### Model architecture
 In the present demostration, three models are trained and compared:
 1. Linear regression - based on the paper [Stanley et al. 2021], baseline for comparison. Represents a linear NN with 1 neuron.
 2. Fully connected NN on patches. 
 3. CNN on the full images.
 
-## Training 
+### Training 
 - Use of the early stopping critera - when validation loss reaches its minimum and stops changing
 - Training on all datasets, so the diffferent regions and datasets are mixed
 
-## Testing
+### Testing
 Once training is finished, the trained model is tested on each region and season separately. Some metrics are compared (MSE, correlation coefficient), as well as prediction snapshots are saved.
 
 ## 3. Prediction and its diagnostics
@@ -109,4 +109,4 @@ It was run on 2i2c cloud.
 
 #Acknowledgements
 
-# Refenrences
+# References
