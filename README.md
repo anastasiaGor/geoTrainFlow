@@ -1,4 +1,4 @@
-# geo_ML_workflow : Geospatial ML prediction workflow
+# geoTrainFlow : Geospatial ML prediction workflow
 
 This repository contains a workflow for supervised training on sets of geospatial data. The workflow consists of 4 main step: data preparation, training, prediction and diagnostics. The workflow is demonstrated on the example of prediction of subgrid temperature variance in the ocean for 2D surface and 3D interior datasets.
 
