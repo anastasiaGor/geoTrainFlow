@@ -1,3 +1,5 @@
+import torch
+
 def tensor_restore_norm(tensor, batch, reference_feature, normalization_feature=None) :
     if (len(tensor.shape) == 3) :
         std = batch['std_'+reference_feature][:,None,None]

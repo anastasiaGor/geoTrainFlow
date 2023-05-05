@@ -1,4 +1,11 @@
-class GenericPyLiModule(pl.LightningModule):
+import torch
+import pytorch_lightning as pl
+from geoTrainFlow.source.tensor_shape_transform import cut_bords, expand_to_bords, transform_and_stack_features
+from geoTrainFlow.source.loss_tools import evaluate_loss_with_mask, pressure_based_MSEloss
+from geoTrainFlow.source.mask_tools import apply_mask_torch
+from geoTrainFlow.source.custom_tensor_operators import finite_diffs_sqr_2d_map
+
+class TrainingModule(pl.LightningModule):
     def __init__(self, torch_model, input_features, output_features, output_units, loss, optimizer, learning_rate, \
                  input_normalization_features=None, loss_normalization=False):
         super().__init__()
@@ -41,32 +48,13 @@ class GenericPyLiModule(pl.LightningModule):
             y_model = y_units*self.torch_model(x)
         
         logs = dict()
-        if (self.torch_model == 'lin_regr_model') :
-            first_layer_weights = list(self.torch_model.__dict__['_modules'].values())[0].weight # for logging
-            first_weight = np.array(first_layer_weights.cpu().detach().numpy()).flat[0]
-            logs['first_weight'] = np.array(first_layer_weights.cpu().detach().numpy()).flat[0]
-        
         if (self.loss=='pressure_based_MSEloss') :
-            if (self.data_geometry != '3D') :
-                print('ERROR: pressure based loss is available only for 3D data')
-                return
-            index_of_temp_var_feature = self.output_features.index('temp_var')
-            pred_sigma = y_model[:, :, index_of_temp_var_feature, :, :]
-            target_sigma = y_true[:, :, index_of_temp_var_feature, :, :]
-            loss_pres_grad = pressure_based_MSEloss(batch, pred_sigma, target_sigma, \
-                                                    self.torch_model.cut_border_pix_output, \
-                                                    idx_level=100, normalization=True)
-            loss_val = evaluate_loss_with_mask('3D', torch.nn.functional.mse_loss, mask, y_model, y_true, \
-                                       reduction='mean', normalization=True)
-            alpha=1.
-            loss_total = alpha*loss_pres_grad+loss_val
-            logs = logs | dict({'loss_train' : loss_total,
-                 'loss_pressure' : loss_pres_grad,
-                 'loss_value' : loss_val})
+            loss_dict = mixed_pressure_loss(self, batch, y_model, y_true, idx_level=100, normalization=True, alpha=1.)
+            logs = logs | loss_dict
         else :
-            loss_val = evaluate_loss_with_mask(self.data_geometry, self.loss, mask, y_model, y_true, \
+            loss_value = evaluate_loss_with_mask(self.data_geometry, self.loss, mask, y_model, y_true, \
                                                reduction='mean', normalization=self.loss_normalization)  
-            logs = logs | dict({'loss_train' : loss_val})
+            logs = logs | dict({'loss_train' : loss_value})
         return logs
         
     def training_step(self, batch, batch_idx) :
@@ -103,7 +91,9 @@ class GenericPyLiModule(pl.LightningModule):
             if (self.output_units is None) :
                 pred[feature] = output_tensor.select(dim=channel_dim, index=i)
             else :
+                # save dimensionless result
                 pred[feature+'_dimless'] = output_tensor.select(dim=channel_dim, index=i)
+                # save result with physocal units
                 pred[feature] = output_tensor_units.select(dim=channel_dim, index=i)
             # if some outputs are normalized then compute also result in the restored units (not normalized)
             if feature.startswith('normalized_') :
@@ -113,11 +103,13 @@ class GenericPyLiModule(pl.LightningModule):
         # save the mask and masked outputs (use the eroded mask)
         for i, feature in enumerate(self.list_of_features_to_predict) :
             if (self.data_geometry == '2D') :
-                 pred['mask'] = batch['eroded_mask']
+                pred['eroded_mask'] = batch['eroded_mask']
+                pred['mask'] = batch['mask']
             if (self.data_geometry == '3D') :
-                pred['mask'] = batch['eroded_mask'][:,None,:,:]
+                pred['eroded_mask'] = batch['eroded_mask'][:,None,:,:]
+                pred['mask'] = batch['mask'][:,None,:,:]
             pred[feature+'_masked'] = expand_to_bords(pred[feature], self.torch_model.cut_border_pix_output)
-            pred[feature+'_masked'] = pred[feature+'_masked'].where(pred['mask'], torch.ones_like(pred[feature+'_masked'])*np.nan)
+            pred[feature+'_masked'] = apply_mask_torch(pred[feature+'_masked'], pred['eroded_mask'])
         return pred 
     
     # testing logic - to evaluate the model after training
@@ -133,9 +125,11 @@ class GenericPyLiModule(pl.LightningModule):
             truth = cut_bords(batch[feature], self.torch_model.cut_border_pix_output)
             model_output = pred[feature]  # use unmasked prediction here, mask will be applied further on error tensor
             
+            # compute standard MSE
             test_dict['loss_val'][feature] = evaluate_loss_with_mask(self.data_geometry, torch.nn.functional.mse_loss, \
                                                                                     mask, model_output, truth, \
                                                                                     reduction='mean', normalization=True)
+            # compute correlation coefficient
             test_dict['corr_coef'][feature] = torch.corrcoef(torch.vstack((torch.flatten(model_output).view(1,-1), \
                                                               torch.flatten(truth).view(1,-1))))[1,0]
             # metrics on horizontal gradients
@@ -144,10 +138,8 @@ class GenericPyLiModule(pl.LightningModule):
             test_dict['loss_grad'][feature] = evaluate_loss_with_mask(self.data_geometry, torch.nn.functional.mse_loss, \
                                                                      mask[:,1:-1,1:-1], model_output_grad, truth_grad, \
                                                                       reduction='mean', normalization=True)
-            test_dict['corr_coef_grad'][feature] = torch.corrcoef(torch.vstack((torch.flatten(model_output_grad).view(1,-1), \
-                                                              torch.flatten(truth_grad).view(1,-1))))[1,0]
 
-        # pressure at 100th level
+        # for 3d data - a specific test: MSE of pressure gradient at 100th level
         if (self.data_geometry == '3D') :
             idx_level = 100
             true_temp_var = cut_bords(batch['temp_var'], self.torch_model.cut_border_pix_output)

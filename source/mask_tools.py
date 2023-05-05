@@ -1,7 +1,15 @@
+import torch
+from scipy import ndimage
+import numpy as np
+
 def erode_bin_mask(xr_mask) :
     erosion_structure_matrix = np.array([(0,0,1,0,0), (0,1,1,1,0), (1,1,1,1,1), (0,1,1,1,0), (0,0,1,0,0)])
     np_array_mask = ndimage.binary_erosion(xr_mask, structure=erosion_structure_matrix)
     return xr_mask.copy(data=np_array_mask)
+
+def apply_mask_torch(feature, mask) :
+    nan_tensor = (torch.ones_like(feature)*np.nan).to(feature.device)
+    return feature.where(mask, nan_tensor)
 
 def masked_mean(data_geometry, tensor, mask, reduction='mean') :
     if (data_geometry == '2D') :

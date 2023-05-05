@@ -1,3 +1,5 @@
+import torch
+
 def central_diffs(dataArray) :
     if len(dataArray.shape) == 5 : #5d data cube
         batch_len, nb_of_levels, nb_of_channels, output_h, output_w = dataArray.shape

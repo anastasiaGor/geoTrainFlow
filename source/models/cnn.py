@@ -1,3 +1,5 @@
+import torch
+
 class CNN(torch.nn.Module):
     def __init__(self, data_geometry, nb_of_input_features, nb_of_output_features, padding='same', padding_mode='replicate', \
                  kernel_size=3, int_layer_width=64, activation_function = torch.nn.functional.relu):

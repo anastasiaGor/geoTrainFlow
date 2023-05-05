@@ -1,3 +1,5 @@
+import torch
+
 class FCNN(torch.nn.Module):
     def __init__(self, data_geometry, nb_of_input_features, nb_of_output_features, input_patch_size, output_patch_size, \
                  activation_function = torch.nn.functional.relu, int_layer_width=50):

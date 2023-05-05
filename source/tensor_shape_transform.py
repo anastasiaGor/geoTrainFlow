@@ -1,3 +1,5 @@
+import torch
+
 def cut_bords(tensor, nb_of_border_pix) :
     if nb_of_border_pix is None :
         return tensor
